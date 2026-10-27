@@ -1,0 +1,31 @@
+# 依赖与本地产物
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+
+# 开发机上的 junction（指向宿主 profile 的 node_modules）
+/plugin-node-modules/
+
+# ---- 不随公开仓库发布的内容（含开发机私有信息）----
+# 1) 测试套件：内嵌开发机的绝对路径与本地账本目录
+tests/
+# 2) 独立评审/审计/决策报告：引用私有账本条目与本地会话 id
+AUDIT-*.md
+REVIEW-*.md
+SECURITY-REVIEW.md
+DECISION-*.md
+PATCH-*.diff
+
+# 测试与调试产物
+*.log
+*.tmp
+*.tmp-*
+edge-profile*/
+lw-tests/
+_recall-lab/
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

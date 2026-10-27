@@ -1,0 +1,79 @@
+{
+  "name": "dsh-ledger-watch",
+  "version": "0.1.0",
+  "description": "Session-level lesson ledger watch for DeepSeek Harness: shows whether a session actually consulted the ledger and recorded its pitfalls.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./recall": {
+      "default": "./lib/recall.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/",
+    "cordis.patch.yml",
+    "install.ps1",
+    "uninstall.ps1",
+    "assets/",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.1.7-rc.2 || >=0.2.0-rc.2"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/dsh-typert-protocol": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-typert-protocol": {
+      "optional": true
+    }
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "plugin",
+    "ledger",
+    "lessons",
+    "self-improvement",
+    "memory",
+    "session"
+  ],
+  "license": "MIT",
+  "author": "OldManDing",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OldManDing/dsh-ledger-watch.git"
+  },
+  "homepage": "https://github.com/OldManDing/dsh-ledger-watch#readme",
+  "bugs": {
+    "url": "https://github.com/OldManDing/dsh-ledger-watch/issues"
+  }
+}

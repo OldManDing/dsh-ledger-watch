@@ -1,0 +1,10 @@
+# Bundle 补丁层：这一行让 Loader 加载本包的 main 入口作为**宿主半边**（普通 Cordis 插件）；
+# 包清单里的 `dsh.client` 声明则让 web 应用把 ./client 作为**浏览器半边**加载。
+#
+# 这就是客户端半边能进启动载荷的唯一途径 —— 只在 ~/.dsh/cordis.patch.yml 里加行
+# 只能让宿主半边生效，浏览器半边永远不会被加载（2026-10-26 实测确认，见账本 DSH-016）。
+#
+# 安装时 install.ps1 会把下面这个 name 改写成带时间戳的包名（换 specifier 才换模块，见 DSH-013）。
+- insert:
+    - id: ledger-watch
+      name: dsh-ledger-watch
