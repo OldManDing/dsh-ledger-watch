@@ -15,6 +15,9 @@
     2. 更新 <DshHome>\profiles\web\package.json：
        dependencies 与 dsh.profile.bundles 里各留一条本包（旧的自动清理），改前备份为
        package.json.bak-ledger-watch
+       —— dependencies 里必须写成 **file:<源码目录>**（本地目录依赖），不能写 "*"：
+          "*" 会让 profile 的 pnpm 去 registry 找这个不存在的包，整棵依赖树解析 404，
+         插件市场的所有更新与回滚全部失败（2026-10-27 实测，见账本 DSH-020）
     3. 从 <DshHome>\cordis.patch.yml 移除旧的 ledger-watch 托管块（避免宿主半边被加载两次）
     4. 清理 profiles\web\node_modules 与 profiles\node_modules 里的旧包目录（各留最新 1 个）
     5. 汇报：并明确告诉你**必须重启 DSH web** 才生效（bundles 与客户端载荷都是启动时组合的）
@@ -95,10 +98,16 @@ $profileText = Read-Text $profilePkgPath
 $backup = "$profilePkgPath.bak-ledger-watch"
 if (-not (Test-Path -LiteralPath $backup)) { Write-Text $backup $profileText }
 
+# 本地包**不能**写成 "*"（2026-10-27 实测，见账本 DSH-020）：
+# profile 的 pnpm 解析会把 "*" 当成 registry 上的包去 npm 找 → ERR_PNPM_FETCH_404，
+# 而且是「整棵依赖树」解析失败 —— 插件市场的每一次更新、以及失败后的回滚，全部 exit=1。
+# 正确写法是目录依赖 file:<源码目录>：pnpm 直接从本地目录取，不碰 registry。
+$depSpec = 'file:' + ((Resolve-Path -LiteralPath $Source).Path -replace '\\', '/')
+
 $before = $profileText
 $profileText = [regex]::Replace($profileText, '(?m)^\s*"dsh-ledger-watch[^"]*"\s*:\s*"[^"]*",\r?\n', '')
 $profileText = [regex]::Replace($profileText, '(?m)^\s*"dsh-ledger-watch[^"]*",\r?\n', '')
-$profileText = [regex]::new('("dependencies"\s*:\s*\{\r?\n)').Replace($profileText, "`$1    `"$pkgName`": `"*`",`r`n", 1)
+$profileText = [regex]::new('("dependencies"\s*:\s*\{\r?\n)').Replace($profileText, "`$1    `"$pkgName`": `"$depSpec`",`r`n", 1)
 $profileText = [regex]::new('("bundles"\s*:\s*\[\r?\n)').Replace($profileText, "`$1        `"$pkgName`",`r`n", 1)
 # 校验：改完之后两处都必须存在本包名（幂等重装时文本可能不变，所以不能拿 $before 比较）
 # 结构化校验（只查文本会漏掉「bundles 没写进去」这类静默失败，见 DSH-016）
