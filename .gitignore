@@ -29,3 +29,9 @@ _recall-lab/
 Thumbs.db
 .vscode/
 .idea/
+
+# 本轮评审报告与截图（含开发机私有信息：会话标题、绝对路径）
+VISUAL-DATA-*.md
+USABILITY-*.md
+*-v2.md
+assets/lw-v2-*.png
