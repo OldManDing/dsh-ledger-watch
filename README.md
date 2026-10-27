@@ -5,6 +5,25 @@
 
 它**不是**审计系统，**不是**监控用户行为的工具，也**不生产规则**（规则由 `lesson-ledger` 账本生产）。
 
+![会话顶部 tab 里的「避坑核对」面板](assets/panel-1x.png)
+
+> 上图是真实运行界面（会话 id 与证据文件路径已替换为占位符）：顶部一行是**启用指示灯**（本会话有没有查经验账本），下面是结论条、本会话指标、事件时间线，页脚是规则库健康度与召回状态。
+
+<details>
+<summary><b>English summary</b></summary>
+
+**What it is.** A bundle plugin for DeepSeek Harness that answers one question per session: *did this session actually consult the lesson ledger, and did it record the pitfalls it hit?*
+
+**What problem it solves.** "I'll remember not to repeat that mistake" is unverifiable. This plugin turns it into data you can check: a per-session indicator, a closing-report callout, and the rule base's health (rules needing rework / rules already revised).
+
+**What it is not.** Not an audit system, not user-behaviour monitoring, and it does not produce rules — the rules live in the `lesson-ledger` skill; this plugin only reports whether they were used.
+
+**Optional auto-recall (default OFF).** The host half can inject the most relevant ledger rules into the step as a system-reminder. It ships disabled because an independent acceptance pass measured ~69% precision on an 87–100 entry Chinese ledger; enable it with `recallMode: 'high-confidence'` only after reading the admission thresholds in the repo's own quality gate.
+
+**Zero runtime dependencies.** The host half uses only Node built-ins; the browser half requires only React (provided by the host).
+
+</details>
+
 ## 两个界面
 
 | 界面 | 插槽 | 说明 |
