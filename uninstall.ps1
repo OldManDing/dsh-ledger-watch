@@ -68,5 +68,28 @@ if ($RemovePackage) {
   Write-Host "包目录保留（加 -RemovePackage 可删除）：$targetDir"
 }
 
+# 摘掉 AGENTS.md 里由安装器写入的托管块（只删块内内容，块外原文保留）
+$agentsPath = Join-Path $DshHome 'AGENTS.md'
+if (Test-Path -LiteralPath $agentsPath) {
+  $h = [System.IO.File]::ReadAllText($agentsPath)
+  $b = '# --- BEGIN dsh-ledger-watch managed block (machine-generated) ---'
+  $e = '# --- END dsh-ledger-watch managed block (machine-generated) ---'
+  $i = $h.IndexOf($b, [StringComparison]::Ordinal)
+  $j = $h.IndexOf($e, [StringComparison]::Ordinal)
+  if ($i -ge 0 -and $j -gt $i) {
+    $rest = $h.Substring($j + $e.Length)
+    $kept = $h.Substring(0, $i).TrimEnd()
+    if (($kept + $rest).Trim().Length -eq 0) {
+      Remove-Item -LiteralPath $agentsPath -Force
+      Write-Host 'AGENTS.md 只含托管块，已删除该文件'
+    } else {
+      $merged = if ($kept.Length -eq 0) { $rest.TrimStart() } else { $kept + "`r`n" + $rest.TrimStart() }
+      [System.IO.File]::WriteAllText($agentsPath, $merged, (New-Object System.Text.UTF8Encoding($false)))
+      Write-Host '已从 AGENTS.md 移除托管块（块外内容保留）'
+    }
+  } else {
+    Write-Host 'AGENTS.md 里没有本插件的托管块'
+  }
+}
 Write-Host ''
 Write-Host '生效：宿主半边会被 live 重载；客户端半边刷新页面（Ctrl+F5）后标签消失。' -ForegroundColor Yellow

@@ -6,7 +6,7 @@
 **界面只是指示灯**：显示「当前会话有没有查过账本」，以及经验账本的健康度。
 
 它**不是**审计系统，**不是**监控用户行为的工具，也**不生产规则**（规则由 `lesson-ledger` 账本技能生产）。
-**装完第一屏不会指责你**：没装账本技能时它会出引导卡（三步 + 可复制的 `AGENTS.md` 片段），而不是一根红条。
+**装完即用**：`install.ps1` 自己部署账本技能（`brief.ps1` / `add-lesson.ps1`）并写入 `AGENTS.md` 托管块，用户不需要手工建目录、贴配置或跑脚本。首屏也不会指责你（没就绪时是一句说明，不是一根红条）。
 
 ![会话顶部 tab 里的「经验账本」面板](assets/panel-1x.png)
 
@@ -21,7 +21,7 @@
 
 **What it is not.** Not an audit system, not user-behaviour monitoring, and it does not produce rules — the rules live in the `lesson-ledger` skill; this plugin only reports whether they were used.
 
-**First run.** If the `lesson-ledger` skill is not installed, the panel shows an onboarding card (three steps plus a copyable `AGENTS.md` snippet) instead of accusing you of skipping a ledger you never had.
+**Zero manual setup.** `install.ps1` provisions the ledger skill (`brief.ps1` / `add-lesson.ps1`) and writes a managed block into `AGENTS.md`; no manual folders, config pasting or script runs. The first screen explains a missing setup instead of accusing you.
 
 **Optional auto-recall (default OFF).** The host half can inject the most relevant ledger rules into the step as a system-reminder. It ships disabled because an independent acceptance pass measured ~69% precision on an 87–100 entry Chinese ledger; enable it with `recallMode: 'high-confidence'` only after reading the admission thresholds in the repo's own quality gate. The panel always shows the current state of this switch, including when it is off and why.
 

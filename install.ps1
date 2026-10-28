@@ -45,7 +45,9 @@ param(
   [string]$Profile = 'web',
   # 开发机专用：把 dependencies 写成 file:<源码绝对路径>，改源码即时生效；
   # 默认（不带本开关）写成 profile 内的相对路径 file:./vendor/<pkg>，跨机器可移植。
-  [switch]$LinkSource
+  [switch]$LinkSource,
+  # 只装插件、不碰 AGENTS.md（想自己接线时用）
+  [switch]$NoAgentsMd
 )
 
 $ErrorActionPreference = 'Stop'
@@ -113,7 +115,56 @@ foreach ($dest in @($vendorDir, $targetDir)) {
   Write-Text (Join-Path $dest 'cordis.patch.yml') $patchText
 }
 
-# ── 2. 登记进 profile 的 dependencies 与 bundles ──────────────────────────
+# ── 2. 自动部署账本技能 + 接线 AGENTS.md ────────────────────────────────────
+# 原来引导卡把「装技能 / 贴 AGENTS.md / 跑脚本」三步派给用户 —— 那是安装器该做的事。
+# 现在安装器自己建目录、拷脚本、写一段带标记的 AGENTS.md 块（可逆：uninstall.ps1 会删掉）。
+$ledgerDir = Join-Path (Join-Path $env:USERPROFILE '.agents\skills') 'lesson-ledger'
+$skillSrc = Join-Path $Source 'skill'
+$skillAction = '未随包提供 skill/（跳过）'
+if (Test-Path -LiteralPath (Join-Path $skillSrc 'tools') -PathType Container) {
+  foreach ($sub in @('lessons', 'workspaces', 'tools')) {
+    $null = New-Item -ItemType Directory -Force -Path (Join-Path $ledgerDir $sub)
+  }
+  Get-ChildItem -LiteralPath (Join-Path $skillSrc 'tools') -File -Filter *.ps1 | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination (Join-Path (Join-Path $ledgerDir 'tools') $_.Name) -Force
+  }
+  $skillAction = '已部署（含 brief.ps1 / add-lesson.ps1）'
+} elseif (Test-Path -LiteralPath $ledgerDir) {
+  $skillAction = '目录已存在，沿用既有内容'
+}
+
+$agentsPath = Join-Path $DshHome 'AGENTS.md'
+$agentsBegin = '# --- BEGIN dsh-ledger-watch managed block (machine-generated) ---'
+$agentsEnd = '# --- END dsh-ledger-watch managed block (machine-generated) ---'
+$agentsBlock = @(
+  $agentsBegin,
+  '## 经验账本（dsh-ledger-watch 自动接线）',
+  '',
+  ('开工前先查：& "' + (Join-Path $ledgerDir 'tools\brief.ps1') + '" -Keywords "<任务相关词>"，把命中的条目摘要贴进回复。'),
+  ('踩坑后补记：& "' + (Join-Path $ledgerDir 'tools\add-lesson.ps1') + '" -Title "<一句话>" -Trigger "<何时>" -Symptom "<现象>" -Rule "<下次怎么做>"。'),
+  $agentsEnd
+) -join $LF
+$agentsAction = '未接线'
+if (-not $NoAgentsMd) {
+  $oldAgents = ''
+  if (Test-Path -LiteralPath $agentsPath) { $oldAgents = Read-Text $agentsPath }
+  $backupAgents = "$agentsPath.bak-ledger-watch"
+  if ((Test-Path -LiteralPath $agentsPath) -and -not (Test-Path -LiteralPath $backupAgents)) { Write-Text $backupAgents $oldAgents }
+  $s2 = $oldAgents.IndexOf($agentsBegin, [StringComparison]::Ordinal)
+  $e2 = $oldAgents.IndexOf($agentsEnd, [StringComparison]::Ordinal)
+  if ($s2 -ge 0 -and $e2 -gt $s2) {
+    $newAgents = $oldAgents.Substring(0, $s2) + $agentsBlock + $oldAgents.Substring($e2 + $agentsEnd.Length)
+    $agentsAction = '已更新既有托管块'
+  } elseif ($oldAgents.Trim().Length -eq 0) {
+    $newAgents = $agentsBlock + $LF
+    $agentsAction = '已创建并接线'
+  } else {
+    $newAgents = $oldAgents.TrimEnd() + $LF + $LF + $agentsBlock + $LF
+    $agentsAction = '已追加托管块（原有内容保留）'
+  }
+  if ($newAgents -ne $oldAgents) { Write-Text $agentsPath $newAgents }
+} else { $agentsAction = '按 -NoAgentsMd 跳过' }
+# ── 3. 登记进 profile 的 dependencies 与 bundles ──────────────────────────
 $profilePkgPath = Join-Path $webProfile 'package.json'
 $profileText = Read-Text $profilePkgPath
 $backup = "$profilePkgPath.bak-ledger-watch"
@@ -185,7 +236,7 @@ $bundleOk = @($verified.dsh.profile.bundles) -contains $pkgName
 if (-not $depOk) { throw "回读校验失败：dependencies 里没有 $pkgName" }
 if (-not $bundleOk) { throw "回读校验失败：dsh.profile.bundles 里没有 $pkgName（客户端半边不会进启动载荷）" }
 
-# ── 3. 移除家目录补丁层里的旧托管块（避免宿主半边重复加载）────────────────
+# ── 4. 移除家目录补丁层里的旧托管块（避免宿主半边重复加载）────────────────
 $homePatch = Join-Path $DshHome 'cordis.patch.yml'
 $homeAction = '家目录补丁层不存在，无需处理'
 if (Test-Path -LiteralPath $homePatch -PathType Leaf) {
@@ -201,7 +252,7 @@ if (Test-Path -LiteralPath $homePatch -PathType Leaf) {
   } else { $homeAction = '家目录补丁层里没有 ledger-watch 托管块（已由 bundle 接管）' }
 }
 
-# ── 4. 清理旧包目录 ───────────────────────────────────────────────────────
+# ── 5. 清理旧包目录 ───────────────────────────────────────────────────────
 $pruned = @()
 foreach ($dir in @($webModules, (Join-Path $DshHome 'profiles\node_modules'), (Join-Path $webProfile 'vendor'))) {
   if (-not (Test-Path -LiteralPath $dir)) { continue }
@@ -219,6 +270,8 @@ Write-Host "包名     : $pkgName"
 Write-Host "依赖写法 : $pkgName -> $depSpec$(if ($useLink) { '  [开发模式 -LinkSource]' } else { '' })"
 Write-Host "profile  : $profilePkgPath  （dependencies + dsh.profile.bundles 各一条）"
 Write-Host "补丁层   : $homeAction"
+Write-Host "账本技能 : $ledgerDir  （$skillAction）"
+Write-Host "AGENTS.md: $agentsPath  （$agentsAction）"
 if ($pruned.Count -gt 0) { Write-Host "清理     : $($pruned -join ', ')" }
 Write-Host ''
 Write-Host '⚠️ 必须重启 DSH web 才生效：' -ForegroundColor Yellow

@@ -18,6 +18,7 @@
   },
   "files": [
     "lib/",
+    "skill/",
     "cordis.patch.yml",
     "install.ps1",
     "uninstall.ps1",
