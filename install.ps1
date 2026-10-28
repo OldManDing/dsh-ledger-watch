@@ -17,7 +17,7 @@
        package.json.bak-ledger-watch
        —— dependencies 里必须写成 **file:<源码目录>**（本地目录依赖），不能写 "*"：
           "*" 会让 profile 的 pnpm 去 registry 找这个不存在的包，整棵依赖树解析 404，
-         插件市场的所有更新与回滚全部失败（2026-10-27 实测，见账本 DSH-020）
+         插件市场的所有更新与回滚全部失败（2026-10-27 实测，见账本 DSH-033）
     3. 从 <DshHome>\cordis.patch.yml 移除旧的 ledger-watch 托管块（避免宿主半边被加载两次）
     4. 清理 profiles\web\node_modules 与 profiles\node_modules 里的旧包目录（各留最新 1 个）
     5. 汇报：并明确告诉你**必须重启 DSH web** 才生效（bundles 与客户端载荷都是启动时组合的）
@@ -42,7 +42,10 @@
 param(
   [string]$DshHome = $(if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $env:USERPROFILE '.dsh' }),
   [string]$Source = $PSScriptRoot,
-  [string]$Profile = 'web'
+  [string]$Profile = 'web',
+  # 开发机专用：把 dependencies 写成 file:<源码绝对路径>，改源码即时生效；
+  # 默认（不带本开关）写成 profile 内的相对路径 file:./vendor/<pkg>，跨机器可移植。
+  [switch]$LinkSource
 )
 
 $ErrorActionPreference = 'Stop'
@@ -65,6 +68,18 @@ $rowId = 'ledger-watch'
 function Write-Text([string]$Path, [string]$Text) { [System.IO.File]::WriteAllText($Path, $Text, $utf8NoBom) }
 function Read-Text([string]$Path) { [System.IO.File]::ReadAllText($Path) }
 
+# StrictMode 下「读一个可能不存在的属性」本身就抛 PropertyNotFoundStrict；
+# 更坑的是刚 `New-Object psobject` 出来的空对象，连 `.PSObject.Properties.Name` 都取不到
+# （集合为空 → 成员枚举报错）。2026-10-28 实测：新 profile（没有 dsh 字段）装到第 149 行必崩，
+# 而「没有 dsh 字段」正是陌生人第一次安装的形状 —— 安装器对最干净的机器是坏的。
+# 唯一稳的读法是走 PSPropertyInfo 索引器：属性不存在时返回 $null，不抛。
+function Get-JsonProp($Object, [string]$Name) {
+  if ($null -eq $Object) { return $null }
+  $prop = $Object.PSObject.Properties[$Name]
+  if ($null -eq $prop) { return $null }
+  return $prop.Value
+}
+
 # ── 1. 复制包本体到 web profile 作用域 ─────────────────────────────────────
 $srcLib = Join-Path $Source 'lib'
 $srcPkg = Join-Path $Source 'package.json'
@@ -75,22 +90,28 @@ foreach ($required in @($srcPkg, $srcPatch, (Join-Path $srcLib 'index.js'), (Joi
 
 $webProfile = Join-Path $DshHome "profiles\$Profile"
 $webModules = Join-Path $webProfile 'node_modules'
+# 包实体放 profile 自己的 vendor/（自包含：删掉 GitHub 克隆目录也不影响启动）。
+# 同时仍复制一份到 node_modules/，因为宿主 loader 今天就按 profile node_modules 解析 specifier；
+# 两处内容完全一致（都从同一份源码复制），pnpm 若真跑起来也只会把 node_modules 那条换成指向 vendor 的链接。
+$vendorDir = Join-Path (Join-Path $webProfile 'vendor') $pkgName
 $targetDir = Join-Path $webModules $pkgName
-$null = New-Item -ItemType Directory -Force -Path (Join-Path $targetDir 'lib')
-# 整个 lib/ 一起复制（以后加模块文件不用再改本脚本）
-Get-ChildItem -LiteralPath $srcLib -File | ForEach-Object {
-  Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $targetDir ('lib' + [IO.Path]::DirectorySeparatorChar + $_.Name)) -Force
+foreach ($dest in @($vendorDir, $targetDir)) {
+  $null = New-Item -ItemType Directory -Force -Path (Join-Path $dest 'lib')
+  # 整个 lib/ 一起复制（以后加模块文件不用再改本脚本）
+  Get-ChildItem -LiteralPath $srcLib -File | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $dest ('lib' + [IO.Path]::DirectorySeparatorChar + $_.Name)) -Force
+  }
+
+  # 包名必须与 loader 行的 specifier 完全一致！
+  # dsh-client-modules 的 nearestPackage() 会沿模块路径向上找 package.json，
+  # 并要求它的 name === 行的 specifier；不一致就**静默跳过**（客户端半边永远不进载荷）。
+  # 2026-10-26 实测踩过：目录叫 dsh-ledger-watch-<stamp>、包内 name 仍是 dsh-ledger-watch → 无任何报错。
+  $pkgText = (Read-Text $srcPkg) -replace '"name"\s*:\s*"[^"]*"', "`"name`": `"$pkgName`""
+  Write-Text (Join-Path $dest 'package.json') $pkgText
+
+  $patchText = (Read-Text $srcPatch) -replace 'name: dsh-ledger-watch', "name: $pkgName"
+  Write-Text (Join-Path $dest 'cordis.patch.yml') $patchText
 }
-
-# 包名必须与 loader 行的 specifier 完全一致！
-# dsh-client-modules 的 nearestPackage() 会沿模块路径向上找 package.json，
-# 并要求它的 name === 行的 specifier；不一致就**静默跳过**（客户端半边永远不进载荷）。
-# 2026-10-26 实测踩过：目录叫 dsh-ledger-watch-<stamp>、包内 name 仍是 dsh-ledger-watch → 无任何报错。
-$pkgText = (Read-Text $srcPkg) -replace '"name"\s*:\s*"[^"]*"', "`"name`": `"$pkgName`""
-Write-Text (Join-Path $targetDir 'package.json') $pkgText
-
-$patchText = (Read-Text $srcPatch) -replace 'name: dsh-ledger-watch', "name: $pkgName"
-Write-Text (Join-Path $targetDir 'cordis.patch.yml') $patchText
 
 # ── 2. 登记进 profile 的 dependencies 与 bundles ──────────────────────────
 $profilePkgPath = Join-Path $webProfile 'package.json'
@@ -98,34 +119,71 @@ $profileText = Read-Text $profilePkgPath
 $backup = "$profilePkgPath.bak-ledger-watch"
 if (-not (Test-Path -LiteralPath $backup)) { Write-Text $backup $profileText }
 
-# 本地包**不能**写成 "*"（2026-10-27 实测，见账本 DSH-020）：
+# 本地包**不能**写成 "*"（2026-10-27 实测，见账本 DSH-033）：
 # profile 的 pnpm 解析会把 "*" 当成 registry 上的包去 npm 找 → ERR_PNPM_FETCH_404，
 # 而且是「整棵依赖树」解析失败 —— 插件市场的每一次更新、以及失败后的回滚，全部 exit=1。
-# 正确写法是目录依赖 file:<源码目录>：pnpm 直接从本地目录取，不碰 registry。
-$depSpec = 'file:' + ((Resolve-Path -LiteralPath $Source).Path -replace '\\', '/')
+#
+# 也**不能**把开发机的绝对路径写进 profile 的 package.json（产品评审 2026-10-28 P0-2）：
+# 陌生人从 GitHub 克隆到别处时路径不同；就算路径对了，克隆目录一删，下次启动依赖解析失败。
+# 解法：把包**实体**复制进 profile 自己的 vendor 目录，依赖写成 profile 内的相对路径
+#   profiles/web/vendor/dsh-ledger-watch   ← 实体（自包含，删掉克隆目录也不影响）
+#   dependencies: "dsh-ledger-watch": "file:./vendor/dsh-ledger-watch"
+# 相对路径由 profile 的 package.json 解析，跨机器一致，且仍然不碰 registry。
+$useLink = $PSBoundParameters.ContainsKey('LinkSource') -and $LinkSource
+$depSpec = if ($useLink) {
+  'file:' + ((Resolve-Path -LiteralPath $Source).Path -replace '\\', '/')
+} else {
+  'file:./vendor/' + $pkgName
+}
 
-$before = $profileText
-$profileText = [regex]::Replace($profileText, '(?m)^\s*"dsh-ledger-watch[^"]*"\s*:\s*"[^"]*",\r?\n', '')
-$profileText = [regex]::Replace($profileText, '(?m)^\s*"dsh-ledger-watch[^"]*",\r?\n', '')
-$profileText = [regex]::new('("dependencies"\s*:\s*\{\r?\n)').Replace($profileText, "`$1    `"$pkgName`": `"$depSpec`",`r`n", 1)
-$profileText = [regex]::new('("bundles"\s*:\s*\[\r?\n)').Replace($profileText, "`$1        `"$pkgName`",`r`n", 1)
-# 校验：改完之后两处都必须存在本包名（幂等重装时文本可能不变，所以不能拿 $before 比较）
-# 结构化校验（只查文本会漏掉「bundles 没写进去」这类静默失败，见 DSH-016）
+# 结构化改写，不用正则（2026-10-28 实测根因）：
+# profile 的 package.json 是**单行压缩 JSON**，旧正则要求 `"dependencies": {` 后面紧跟换行，
+# 于是在这种文件上永远匹配不到 —— 依赖与 bundles 一条都没写进去，脚本却只在最后抛
+# 「未被改写」这种看不出原因的话。改成解析 → 改对象 → 写回，幂等且与格式无关。
 $profileJson = $null
 try { $profileJson = $profileText | ConvertFrom-Json } catch { throw "profile package.json 不是合法 JSON：$($_.Exception.Message)" }
-$depOk = $false
-if ($profileJson.PSObject.Properties.Name -contains 'dependencies') {
-  $depOk = @($profileJson.dependencies.PSObject.Properties.Name) -contains $pkgName
+if ($null -eq (Get-JsonProp $profileJson 'dependencies')) {
+  $profileJson | Add-Member -NotePropertyName dependencies -NotePropertyValue (New-Object psobject) -Force
 }
-$bundleOk = $false
-if ($profileJson.PSObject.Properties.Name -contains 'dsh' -and $profileJson.dsh -ne $null -and
-    $profileJson.dsh.PSObject.Properties.Name -contains 'profile' -and $profileJson.dsh.profile -ne $null -and
-    $profileJson.dsh.profile.PSObject.Properties.Name -contains 'bundles') {
-  $bundleOk = @($profileJson.dsh.profile.bundles) -contains $pkgName
+$deps = [ordered]@{}
+if ($profileJson.dependencies -ne $null) {
+  foreach ($prop in $profileJson.dependencies.PSObject.Properties) { $deps[$prop.Name] = $prop.Value }
 }
-if (-not $depOk) { throw "profile package.json 的 dependencies 里没有 $pkgName" }
-if (-not $bundleOk) { throw "profile package.json 的 dsh.profile.bundles 里没有 $pkgName（客户端半边不会进启动载荷）" }
-Write-Text $profilePkgPath $profileText
+# 清掉本包所有历史写法（含旧的时间戳包名），只留一条
+foreach ($key in @($deps.Keys)) { if ($key -like "$baseName*") { $deps.Remove($key) } }
+$deps[$pkgName] = $depSpec
+
+# Set-StrictMode 下给 PSCustomObject **新增**属性只能走 Add-Member：
+# 直接 `$obj.newKey = ...` 会抛 "The property 'X' cannot be found on this object"（本脚本曾因此失败）
+if ($null -eq (Get-JsonProp $profileJson 'dsh')) {
+  $profileJson | Add-Member -NotePropertyName dsh -NotePropertyValue (New-Object psobject) -Force
+}
+if ($null -eq (Get-JsonProp (Get-JsonProp $profileJson 'dsh') 'profile')) {
+  $profileJson.dsh | Add-Member -NotePropertyName profile -NotePropertyValue (New-Object psobject) -Force
+}
+if ($null -eq (Get-JsonProp (Get-JsonProp (Get-JsonProp $profileJson 'dsh') 'profile') 'bundles')) {
+  $profileJson.dsh.profile | Add-Member -NotePropertyName bundles -NotePropertyValue @() -Force
+}
+$bundles = New-Object System.Collections.ArrayList
+foreach ($b in @($profileJson.dsh.profile.bundles)) { $null = $bundles.Add([string]$b) }
+# 本包必须排在**最前**（bundles 是有序栈，声明在前 = 参与组合在前；本包只加一个 tab，顺序无副作用但保持一致）
+$kept = New-Object System.Collections.ArrayList
+foreach ($b in $bundles) { if ($b -notlike "$baseName*") { $null = $kept.Add($b) } }
+$null = $bundles.Clear()
+$null = $bundles.Add($pkgName)
+foreach ($b in $kept) { $null = $bundles.Add($b) }
+
+# 已有属性用赋值（保留属性位置），确保写回顺序稳定
+$profileJson.dependencies = [pscustomobject]$deps
+$profileJson.dsh.profile.bundles = @($bundles)
+
+# 结构化校验：改完再把内存对象写回文件，再从**文件**读回校验（不校验内存那份）
+Write-Text $profilePkgPath ($profileJson | ConvertTo-Json -Depth 12)
+$verified = (Read-Text $profilePkgPath) | ConvertFrom-Json
+$depOk = @($verified.dependencies.PSObject.Properties.Name) -contains $pkgName
+$bundleOk = @($verified.dsh.profile.bundles) -contains $pkgName
+if (-not $depOk) { throw "回读校验失败：dependencies 里没有 $pkgName" }
+if (-not $bundleOk) { throw "回读校验失败：dsh.profile.bundles 里没有 $pkgName（客户端半边不会进启动载荷）" }
 
 # ── 3. 移除家目录补丁层里的旧托管块（避免宿主半边重复加载）────────────────
 $homePatch = Join-Path $DshHome 'cordis.patch.yml'
@@ -145,10 +203,10 @@ if (Test-Path -LiteralPath $homePatch -PathType Leaf) {
 
 # ── 4. 清理旧包目录 ───────────────────────────────────────────────────────
 $pruned = @()
-foreach ($dir in @($webModules, (Join-Path $DshHome 'profiles\node_modules'))) {
+foreach ($dir in @($webModules, (Join-Path $DshHome 'profiles\node_modules'), (Join-Path $webProfile 'vendor'))) {
+  if (-not (Test-Path -LiteralPath $dir)) { continue }
   $old = @(Get-ChildItem -LiteralPath $dir -Directory -ErrorAction SilentlyContinue |
-           Where-Object { $_.Name -like "$baseName*" -and $_.Name -ne $pkgName } |
-           Sort-Object Name -Descending | Select-Object -Skip 1)
+           Where-Object { $_.Name -like "$baseName*" -and $_.Name -ne $pkgName })
   foreach ($d in $old) { Remove-Item -LiteralPath $d.FullName -Recurse -Force; $pruned += $d.Name }
 }
 
@@ -156,7 +214,9 @@ foreach ($dir in @($webModules, (Join-Path $DshHome 'profiles\node_modules'))) {
 Write-Host '账本监视插件（bundle 型）安装完成。' -ForegroundColor Green
 Write-Host ''
 Write-Host "包目录   : $targetDir"
+Write-Host "包实体   : $vendorDir  （profile 自包含，删掉源码克隆目录也不影响）"
 Write-Host "包名     : $pkgName"
+Write-Host "依赖写法 : $pkgName -> $depSpec$(if ($useLink) { '  [开发模式 -LinkSource]' } else { '' })"
 Write-Host "profile  : $profilePkgPath  （dependencies + dsh.profile.bundles 各一条）"
 Write-Host "补丁层   : $homeAction"
 if ($pruned.Count -gt 0) { Write-Host "清理     : $($pruned -join ', ')" }

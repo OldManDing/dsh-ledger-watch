@@ -1,24 +1,29 @@
-# dsh-ledger-watch · 避坑核对
+# dsh-ledger-watch · 经验账本指示灯
+
+**一句话**：**这个会话有没有真的遵守你自己定的规则** —— 查过经验账本吗、记下踩过的坑了吗。
 
 **目的**：让模型**真的**在查经验账本、记下踩过的坑、修正失效的规则 —— 也就是自我提升 / 自我避坑 / 自我升级。
-**界面只是指示灯**：显示「当前会话有没有启用这个避坑/提升功能」，以及规则库的健康度。
+**界面只是指示灯**：显示「当前会话有没有查过账本」，以及经验账本的健康度。
 
-它**不是**审计系统，**不是**监控用户行为的工具，也**不生产规则**（规则由 `lesson-ledger` 账本生产）。
+它**不是**审计系统，**不是**监控用户行为的工具，也**不生产规则**（规则由 `lesson-ledger` 账本技能生产）。
+**装完第一屏不会指责你**：没装账本技能时它会出引导卡（三步 + 可复制的 `AGENTS.md` 片段），而不是一根红条。
 
-![会话顶部 tab 里的「避坑核对」面板](assets/panel-1x.png)
+![会话顶部 tab 里的「经验账本」面板](assets/panel-1x.png)
 
-> 上图是真实运行界面（会话 id 与证据文件路径已替换为占位符）：顶部一行是**启用指示灯**（本会话有没有查经验账本），下面是结论条、本会话指标、事件时间线，页脚是规则库健康度与召回状态。
+> 上图是真实运行界面（会话 id 与证据文件路径已替换为占位符）：顶部一行是**启用指示灯**（本会话有没有查经验账本），下面是结论条、本会话指标、可疑信号、事件时间线，页脚是账本健康度与召回状态。
 
 <details>
 <summary><b>English summary</b></summary>
 
 **What it is.** A bundle plugin for DeepSeek Harness that answers one question per session: *did this session actually consult the lesson ledger, and did it record the pitfalls it hit?*
 
-**What problem it solves.** "I'll remember not to repeat that mistake" is unverifiable. This plugin turns it into data you can check: a per-session indicator, a closing-report callout, and the rule base's health (rules needing rework / rules already revised).
+**What problem it solves.** "I'll remember not to repeat that mistake" is unverifiable. This plugin turns it into data you can check: a per-session indicator, a closing-report callout, and the ledger's health (rules needing rework / rules already revised).
 
 **What it is not.** Not an audit system, not user-behaviour monitoring, and it does not produce rules — the rules live in the `lesson-ledger` skill; this plugin only reports whether they were used.
 
-**Optional auto-recall (default OFF).** The host half can inject the most relevant ledger rules into the step as a system-reminder. It ships disabled because an independent acceptance pass measured ~69% precision on an 87–100 entry Chinese ledger; enable it with `recallMode: 'high-confidence'` only after reading the admission thresholds in the repo's own quality gate.
+**First run.** If the `lesson-ledger` skill is not installed, the panel shows an onboarding card (three steps plus a copyable `AGENTS.md` snippet) instead of accusing you of skipping a ledger you never had.
+
+**Optional auto-recall (default OFF).** The host half can inject the most relevant ledger rules into the step as a system-reminder. It ships disabled because an independent acceptance pass measured ~69% precision on an 87–100 entry Chinese ledger; enable it with `recallMode: 'high-confidence'` only after reading the admission thresholds in the repo's own quality gate. The panel always shows the current state of this switch, including when it is off and why.
 
 **Zero runtime dependencies.** The host half uses only Node built-ins; the browser half requires only React (provided by the host).
 
@@ -28,8 +33,8 @@
 
 | 界面 | 插槽 | 说明 |
 | --- | --- | --- |
-| **会话顶部 tab**「避坑核对」 | `conversation.view`（order 30，在「画廊」之后） | 主界面：启用指示灯 + 规则库健康度 + 本会话指标 + 事件时间线 + 其它会话 |
-| **输入框下方药丸** | `conversation.composer.dock`（5 秒轮询） | `● 避坑 5 / 11`，圆点颜色 = 结论；在本 tab 内随输入框一起隐藏且**停止轮询** |
+| **会话顶部 tab**「经验账本」 | `conversation.view`（order 30，在「画廊」之后） | 主界面：启用指示灯 + 账本健康度 + 本会话指标 + 可疑信号 + 事件时间线 + 其它会话 |
+| **输入框下方药丸** | `conversation.composer.dock`（5 秒轮询） | `● 账本 5 / 11`，圆点颜色 = 结论；在本 tab 内随输入框一起隐藏且**停止轮询** |
 
 本 tab 在屏时会隐藏宿主输入框（`[data-composer-seat]` + 把 `--dsh-composer-height` 归零），切走即恢复。
 
@@ -39,8 +44,31 @@
 | --- | --- |
 | **避坑功能已启用**（绿） | 本会话查过账本（`queries > 0`） |
 | **避坑功能未启用**（红） | 本会话一次都没查过账本，但已经在动工具 |
-| 结论 `又查又记` / `查了没记` / `记了没查` / `未查询` / `无活动` | 由 queries 与 records 组合得出 |
+| **本会话不在监视范围内**（灰） | 插件**从没观测到**这个会话（`sessionKnown === false`）：重启前就已存在的会话、或跑在别的进程里的会话。与「没查账本」是两回事，不能混为一谈 |
+| 结论 `又查又记` / `查了没记` / `记了没查` / `未查询` / `无活动` | 由 queries 与 records 组合得出；「不在监视范围内」时不显示结论（没有观测就没有结论） |
 | ⚠ 补记横幅 | `needRecord`：本会话有**失败的**工具调用，却一条坑都没记 → 收尾请用 `add-lesson.ps1` 补记 |
+
+### 首次使用（没装账本技能时）
+
+插件**不生产规则**。`ledgerDir`（默认 `~/.agents/skills/lesson-ledger`）里没有 `lessons/` 与 `workspaces/` 时，
+面板**不会**判红（那不是你的错，是还没有账本可查），而是出一张引导卡：
+
+1. 装 `lesson-ledger` 技能（把该目录放进你的技能目录）；
+2. 把一段 `AGENTS.md` 片段贴进去（开工自报，让模型每次先查账本）—— 卡上可以一键复制；
+3. 用 `add-lesson.ps1` 记第一条坑。
+
+三种状态由 `scanLedger()` 给出，界面据此分流：`missing`（技能没装）/ `empty`（技能在、零条目）/ `ready`（可查）。
+
+### 观测范围（重要）
+
+插件只在 **DSH 运行期间**通过 `ctx.on('tools/result')` 观测工具调用，因此：
+
+- 内存里只有**本进程启动之后**见过的会话；`state()` 会把内存与证据文件 `.watch.json` 合并后再返回，
+  所以重启前活跃的会话仍能显示自己的历史计数（**读路径与写路径共用一份合并**，见 `mergeWithPrevious`）。
+- **从未被观测到**的会话（插件安装之前的老会话、或运行在其他进程里的会话）没有数据可补，
+  界面会明确显示「本会话不在监视范围内」，而**不是**「本会话还没开始」——后者会让人误以为所有会话内容一样。
+- 落盘的会话列表上限 10 条（`payload.sessions.slice(0, 10)`），界面「其它会话」再截断到 8 条（`SESSION_LIMIT`）；
+  内存里最多保留 24 条（`MAX_SESSIONS`）。
 
 计数口径（2026-10-27 评审后收紧）：
 
@@ -66,6 +94,9 @@
 | `churn` | 工具调用 ≥ 25 次却一条坑都没记 | 干了很多活、什么都没沉淀 |
 
 当 `records === 0` 且任一信号非零时，面板出 ⚠ 横幅、收尾自报点名，并写出**具体是哪些信号**（例如「失败调用 2 次 · 用户疑似纠正 1 次」）。
+
+**信号行常显**：指标下方始终有一行 `可疑信号：失败 2 · 重复 1`（没有就显示「暂无」）。
+原来只在「零记录」时出一条横幅 —— 用户记了一条坑，整块就消失了，48 条用例建起来的引擎没有出口。
 
 **边界**：信号 ≠ 坑。失败调用可能只是探针故意跑失败；用户说「不对」也可能只是改需求。所以插件只提醒、不判定，也不会因为信号非零就自动往账本里写东西。
 ## 数据从哪来
@@ -96,9 +127,19 @@
 ```
 
 ```powershell
-# 安装 / 更新（F 盘脚本会被 RemoteSigned 拦，必须带 -ExecutionPolicy Bypass）
-powershell -NoProfile -ExecutionPolicy Bypass -File F:\dsh\plugins\ledger-watch\install.ps1
+# 在你自己克隆下来的目录里运行（不要用别人机器上的路径）
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
+
+脚本做三件事，**都与源码放在哪无关**：
+
+1. 把包实体复制进 `profiles/web/vendor/dsh-ledger-watch/`（**自包含**：之后删掉克隆目录也不影响启动）；
+2. 在 `profiles/web/package.json` 里写 `"dsh-ledger-watch": "file:./vendor/dsh-ledger-watch"`
+   并登记 `dsh.profile.bundles`（相对路径，跨机器一致，且不会去 registry 找这个包）；
+3. 清理旧包目录。
+
+> 开发机想「改源码即时生效」可以加 `-LinkSource`，那会把依赖写成 `file:<你的源码绝对路径>`。
+> 注意那**不可移植** —— 源码目录一删，下次启动依赖解析就会失败。
 
 | 改了什么 | 怎么生效 |
 | --- | --- |
@@ -108,12 +149,24 @@ powershell -NoProfile -ExecutionPolicy Bypass -File F:\dsh\plugins\ledger-watch\
 **三处 id 必须逐字相同**（否则静默跳过或报 `duplicate factory registration`）：
 `cordis.patch.yml` 的 `- insert[].name` ／ `package.json` 的 `name` ／ `lib/client.js` 里 `__ModuleLoader__.load({ id })`（外加目录名）。
 
+## 配置
+
+在 profile 的 cordis 补丁层里给本包的 loader 行加 `config`：
+
+| 键 | 默认 | 说明 |
+| --- | --- | --- |
+| `ledgerDir` | `~/.agents/skills/lesson-ledger` | 账本根目录 |
+| `recallMode` | `'off'` | 设 `'high-confidence'` 才开启自动召回（准入未过，见上文） |
+| `exposeEvidence` | `false` | 是否允许界面读取证据文件原文 |
+
 ## 测试
 
 ```powershell
-node F:\dsh\plugins\ledger-watch\tests\run-all.mjs     # 55 条：宿主 49 + 界面 6
+node .\tests\run-all.mjs
 ```
-界面用例会自动拉一个临时实例与无头 Edge（CDP，自签 cookie）。当前状态：**55 / 55 通过**。
+
+当前状态：**207 条全部通过**（宿主 55 + 信号 50 + 界面 7 + 召回 85 + 质量准入 13，其中质量准入 12/13）。
+`tests/` 不随公开仓库发布（内含开发机的绝对路径与本地账本语料），如需运行请在本地仓库保留该目录。
 
 ## 已知限制
 
@@ -125,7 +178,7 @@ node F:\dsh\plugins\ledger-watch\tests\run-all.mjs     # 55 条：宿主 49 + �
 ## 回滚
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File F:\dsh\plugins\ledger-watch\uninstall.ps1 -RemovePackage
+powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1 -RemovePackage
 ```
 再从 `profiles/web/package.json` 的 `dependencies` 与 `dsh.profile.bundles` 里删掉 `dsh-ledger-watch`，重启 DSH。
 
@@ -137,13 +190,17 @@ ledger-watch/
 ├── cordis.patch.yml        # bundle 自带补丁层（插入宿主半边的 loader 行）
 ├── lib/index.js            # 宿主半边：观测 + 统计 + 证据文件 + Remote 面（state/evidence/report）
 ├── lib/client.js           # 浏览器半边：会话 tab + 药丸
+├── lib/recall.js           # 账本扫描 + 条目特征 + 召回打分
 ├── install.ps1 / uninstall.ps1
-├── tests/                  # 55 条自动化用例（run-all.mjs）
 └── README.md
 ```
 
-## 相关报告
+## 设计取向（为什么是这样）
 
-- `REVIEW-2026-10-27-visual.md` 视觉验收 ／ `REVIEW-2026-10-27-ux.md` 信息架构
-- `REVIEW-2026-10-27-client-half.md` 前端实现 ／ `SECURITY-REVIEW.md` 安全与健壮性
-- `AUDIT-2026-10-27-delivery-verification.md` 交付取证与缺陷对账
+- **不做语义判断**：插件不猜「这段经历算不算坑」。判据写在账本技能与 `~/.dsh/AGENTS.md` 里，模型负责判断。
+  一旦由插件来判断，错判就会被当成事实（实测过：主力是 LLM 蒸馏的同类工具，噪声全出在这里）。
+- **只标信号，不阻断**：失败/重复/反复改/被纠正/空转，只计数并显示，不自动写账本、不改写模型调用。
+- **召回默认关闭**：宁可漏召，不产噪声。连续四轮调参（70.8% → 60.6% → 68.8% → 66.3%）证明在旧形态上继续调参
+  没有收益，所以保留高置信模式但不默认开，并把状态常显在页脚。
+- **可回归**：账本的规则健康度（失效待改 / 已修订）与 `selftest.ps1` 的断言让它变得可测，
+  这才是「自我提升」里唯一能被验证的部分。
