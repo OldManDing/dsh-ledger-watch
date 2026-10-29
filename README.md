@@ -117,6 +117,22 @@
 
 收尾自报里也会点名（`tools\report.ps1` 尾部「避坑功能」段）：未查 / 踩坑未记都会打 ⚠。
 
+## 安装（推荐：从 npm 装）
+
+已发布到 npm：dsh-ledger-watch。这是**唯一能进 DSH 插件市场搜索**的形态（市场索引只收 npm 包）。
+
+```powershell
+dsh plugin --profile web add dsh-ledger-watch
+# 然后跑一次安装器把技能与 AGENTS.md 接线补齐（它不会重复下载包，只做本地配置）
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+也可以直接从 GitHub 装（不进市场搜索，但能跑）：
+
+```powershell
+dsh plugin --profile web add github:OldManDing/dsh-ledger-watch
+```
+
 ## 安装与生效方式（重要）
 
 本包是 **bundle 型**插件（浏览器半边只能靠 bundle 进启动载荷）：
