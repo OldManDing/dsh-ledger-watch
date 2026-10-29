@@ -1,7 +1,7 @@
 {
   "name": "dsh-ledger-watch",
-  "version": "0.1.3",
-  "description": "See at a glance whether this session checked the lesson ledger and recorded its pitfalls, and which entries it wrote. Nothing to configure.",
+  "version": "0.1.5",
+  "description": "Watches whether this session really consults the lesson ledger and records new pitfalls, so mistakes already made get skipped instead of repeated.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
