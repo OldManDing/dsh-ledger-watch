@@ -1,6 +1,6 @@
 {
   "name": "dsh-ledger-watch",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Ships a minimal lesson ledger (brief.ps1 lookup, add-lesson.ps1 record) and deploys it at install, then watches whether the session actually consults and updates it, so pitfalls already recorded are not hit twice.",
   "type": "module",
   "main": "lib/index.js",
