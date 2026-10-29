@@ -1,7 +1,7 @@
 {
   "name": "dsh-ledger-watch",
-  "version": "0.1.1",
-  "description": "Session-level lesson ledger watch for DeepSeek Harness: shows whether a session actually consulted the ledger and recorded its pitfalls.",
+  "version": "0.1.2",
+  "description": "Shows whether the current DSH session consulted the lesson ledger before working and recorded the pitfalls it hit. Install wires everything automatically.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
