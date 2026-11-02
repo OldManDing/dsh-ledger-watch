@@ -128,7 +128,13 @@ if (Test-Path -LiteralPath (Join-Path $skillSrc 'tools') -PathType Container) {
   Get-ChildItem -LiteralPath (Join-Path $skillSrc 'tools') -File -Filter *.ps1 | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination (Join-Path (Join-Path $ledgerDir 'tools') $_.Name) -Force
   }
-  $skillAction = '已部署（含 brief.ps1 / add-lesson.ps1）'
+  # SKILL.md 让技能真被注册（没有它，模型的「加载 lesson-ledger 技能」永远是死路）
+  $skillMd = Join-Path $skillSrc 'SKILL.md'
+  if (Test-Path -LiteralPath $skillMd) {
+    Copy-Item -LiteralPath $skillMd -Destination (Join-Path $ledgerDir 'SKILL.md') -Force
+  }
+  $toolCount = @(Get-ChildItem -LiteralPath (Join-Path $ledgerDir 'tools') -File -Filter *.ps1).Count
+  $skillAction = ('已部署（SKILL.md + {0} 个脚本）' -f $toolCount)
 } elseif (Test-Path -LiteralPath $ledgerDir) {
   $skillAction = '目录已存在，沿用既有内容'
 }
@@ -140,8 +146,10 @@ $agentsBlock = @(
   $agentsBegin,
   '## 经验账本（dsh-ledger-watch 自动接线）',
   '',
-  ('开工前先查：& "' + (Join-Path $ledgerDir 'tools\brief.ps1') + '" -Keywords "<任务相关词>"，把命中的条目摘要贴进回复。'),
-  ('踩坑后补记：& "' + (Join-Path $ledgerDir 'tools\add-lesson.ps1') + '" -Title "<一句话>" -Trigger "<何时>" -Symptom "<现象>" -Rule "<下次怎么做>"。'),
+  ('经验账本：本机有一个只读的 Markdown 经验账本（技能名 lesson-ledger），记录踩过的坑与对应规则。任务涉及以前碰过的系统、工具、路径、权限时，按下述三段式执行；不相关的小任务可以跳过，但涉及历史问题必须查。'),
+  ('① 开工前查：& "' + (Join-Path $ledgerDir 'tools\brief.ps1') + '" -Keywords "<任务相关词>"。命中的条目摘要要贴进回复，再动手。'),
+  ('② 踩坑后记：& "' + (Join-Path $ledgerDir 'tools\add-lesson.ps1') + '" -Title "<一句话>" -Trigger "<何时>" -Symptom "<现象>" -Rule "<下次怎么做>"。命令报错、被用户纠正、发现更好做法都算。'),
+  ('③ 收尾自报：& "' + (Join-Path $ledgerDir 'tools\closing.ps1') + '" -Done "<已完成>" -Todo "<待办>"。'),
   $agentsEnd
 ) -join $LF
 $agentsAction = '未接线'
