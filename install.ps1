@@ -104,6 +104,23 @@ foreach ($dest in @($vendorDir, $targetDir)) {
     Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $dest ('lib' + [IO.Path]::DirectorySeparatorChar + $_.Name)) -Force
   }
 
+  # skill/ 必须一起进包目录：宿主半边启动时会用它补齐账本骨架
+  # （缺了它，`ensureScaffold()` 找不到源文件，就只能补空目录 —— 实测漏过一次）
+  $srcSkill = Join-Path $Source 'skill'
+  if (Test-Path -LiteralPath $srcSkill -PathType Container) {
+    $destSkill = Join-Path $dest 'skill'
+    $null = New-Item -ItemType Directory -Force -Path $destSkill
+    Copy-Item -LiteralPath (Join-Path $srcSkill 'SKILL.md') -Destination $destSkill -Force -ErrorAction SilentlyContinue
+    $srcTools = Join-Path $srcSkill 'tools'
+    if (Test-Path -LiteralPath $srcTools -PathType Container) {
+      $destTools = Join-Path $destSkill 'tools'
+      $null = New-Item -ItemType Directory -Force -Path $destTools
+      Get-ChildItem -LiteralPath $srcTools -File -Filter *.ps1 | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination $destTools -Force
+      }
+    }
+  }
+
   # 包名必须与 loader 行的 specifier 完全一致！
   # dsh-client-modules 的 nearestPackage() 会沿模块路径向上找 package.json，
   # 并要求它的 name === 行的 specifier；不一致就**静默跳过**（客户端半边永远不进载荷）。
