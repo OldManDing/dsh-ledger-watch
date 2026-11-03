@@ -13,6 +13,7 @@ $fieldRe = @{
   '症状'     = [regex]'^- \*\*症状\*\*：(.+)$'
   '规则'     = [regex]'^- \*\*规则\*\*：(.+)$'
   '状态'     = [regex]'^- \*\*状态\*\*：(.+)$'
+  '检测'     = [regex]'^- \*\*检测\*\*：(.+)$'
 }
 
 $entries = @()
@@ -75,5 +76,27 @@ if ($bad.Count -eq 0) { Ok '同前缀编号连续' } else { Bad ($bad -join '；
 $noTitle = @($entries | Where-Object { $_.title.Length -eq 0 } | ForEach-Object { $_.id })
 if ($noTitle.Count -eq 0) { Ok '每条都有标题' } else { Bad ('没有标题：' + ($noTitle -join ', ')) }
 
+# 5) 检测段语法（可选字段：没写不算错，写了必须能被插件解析）
+$detectBad = @()
+$detectOk = 0
+foreach ($e in $entries) {
+  if (-not $e.fields.ContainsKey('检测')) { continue }
+  $d = $e.fields['检测'].Trim()
+  $bad = ''
+  foreach ($part in ($d -split ';')) {
+    $part = $part.Trim()
+    if ($part.Length -eq 0) { continue }
+    $eq = $part.IndexOf('=')
+    if ($eq -lt 0) { $bad = "缺少 '='：$part"; break }
+    $key = $part.Substring(0, $eq).Trim().ToLower()
+    $val = $part.Substring($eq + 1).Trim()
+    if ($val.Length -eq 0) { $bad = "空值：$key"; break }
+    if (($key -eq 'tool' -or $key -eq 'path') -and $val -match '\s') { $bad = "$key 里有空格（子句要用分号隔开）"; break }
+    if ($key -ne 'tool' -and $key -ne 'path' -and $key -ne 'command') { $bad = "未知键：$key"; break }
+  }
+  if ($bad.Length -gt 0) { $detectBad += ('{0} {1}' -f $e.id, $bad) } else { $detectOk++ }
+}
+if ($detectBad.Count -eq 0) { Ok ("检测段语法正确（{0} 条可机检，{1} 条未声明）" -f $detectOk, ($entries.Count - $detectOk)) }
+else { Bad ('检测段语法错误：' + ($detectBad -join '；')) }
 Write-Output ("通过 {0} 项，失败 {1} 项" -f $pass, $fail)
 if ($fail -gt 0) { exit 1 }

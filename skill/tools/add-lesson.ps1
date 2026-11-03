@@ -13,7 +13,11 @@ param(
   [string]$Symptom = '',
   [string]$Rule = '',
   [string]$Status = '有效',
-  [string]$Prefix = 'ENV'
+  [string]$Prefix = 'ENV',
+  # 可选：可机检的触发条件，让插件能在下次踩同一个坑时当场提醒。
+  # 语法：tool=工具名; path=路径通配; command=命令子串（command 放最后，允许空格）
+  # 例：-Detect 'tool=write; path=*.ps1'    -Detect 'tool=pwsh; command=docker_data'
+  [string]$Detect = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,6 +46,32 @@ $block += ''
 if ($Trigger) { $block += ('- **触发场景**：' + $Trigger.Trim()) }
 if ($Symptom) { $block += ('- **症状**：' + $Symptom.Trim()) }
 if ($Rule)    { $block += ('- **规则**：' + $Rule.Trim()) }
+if ($Detect) {
+  # 写入前自校验：语法错就让作者当场知道，而不是留一条永不命中的检测段
+  $d = $Detect.Trim()
+  $ok = $true; $why = ''
+  foreach ($part in ($d -split ';')) {
+    $part = $part.Trim()
+    if ($part.Length -eq 0) { continue }
+    $eq = $part.IndexOf('=')
+    if ($eq -lt 0) { $ok = $false; $why = "缺少 '='：$part"; break }
+    $key = $part.Substring(0, $eq).Trim().ToLower()
+    $val = $part.Substring($eq + 1).Trim()
+    if ($val.Length -eq 0) { $ok = $false; $why = "空值：$key"; break }
+    if ($key -eq 'tool' -or $key -eq 'path') {
+      if ($val -match '\s') { $ok = $false; $why = "$key 里有空格（多个子句要用分号隔开）：$val"; break }
+    } elseif ($key -ne 'command') {
+      $ok = $false; $why = "未知键：$key（只支持 tool / path / command）"; break
+    }
+  }
+  if (-not $ok) {
+    Write-Output ('检测段语法错误：' + $why)
+    Write-Output '正确写法：-Detect "tool=write; path=*.ps1"  或  -Detect "tool=pwsh; command=docker_data"'
+    Write-Output '（本次未写入任何内容，修正后重跑）'
+    exit 1
+  }
+  $block += ('- **检测**：' + $d)
+}
 $block += ('- **状态**：' + $Status.Trim())
 
 $existing = ''
