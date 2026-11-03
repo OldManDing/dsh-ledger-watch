@@ -150,8 +150,23 @@ if (Test-Path -LiteralPath (Join-Path $skillSrc 'tools') -PathType Container) {
   if (Test-Path -LiteralPath $skillMd) {
     Copy-Item -LiteralPath $skillMd -Destination (Join-Path $ledgerDir 'SKILL.md') -Force
   }
+  # 写一份部署清单（每个文件的 sha256）：插件下次启动时据此判断
+  # 「这个脚本是我们放的、用户没改过」→ 才能安全地随版本升级覆盖。
+  $manifest = [ordered]@{}
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  foreach ($f in (Get-ChildItem -LiteralPath (Join-Path $ledgerDir 'tools') -File -Filter *.ps1)) {
+    $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
+    $manifest[$f.Name] = ([BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToLowerInvariant()
+  }
+  $skillDst = Join-Path $ledgerDir 'SKILL.md'
+  if (Test-Path -LiteralPath $skillDst) {
+    $bytes = [System.IO.File]::ReadAllBytes($skillDst)
+    $manifest['SKILL.md'] = ([BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToLowerInvariant()
+  }
+  $sha.Dispose()
+  [System.IO.File]::WriteAllText((Join-Path $ledgerDir '.tools-manifest.json'), ($manifest | ConvertTo-Json), $utf8NoBom)
   $toolCount = @(Get-ChildItem -LiteralPath (Join-Path $ledgerDir 'tools') -File -Filter *.ps1).Count
-  $skillAction = ('已部署（SKILL.md + {0} 个脚本）' -f $toolCount)
+  $skillAction = ('已部署（SKILL.md + {0} 个脚本 + 升级清单）' -f $toolCount)
 } elseif (Test-Path -LiteralPath $ledgerDir) {
   $skillAction = '目录已存在，沿用既有内容'
 }
